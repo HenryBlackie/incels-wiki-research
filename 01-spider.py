@@ -101,6 +101,7 @@ class IncelswikiSpider(scrapy.Spider):
         if response.status == 200:
             with open(f'{directory}/{filename}.html', 'wb+') as f:
                 f.write(response.body)
+                self.logger.info(f'Saved {filename}.html to {directory}')
     
     def remote_archive(self):
         pass
