@@ -9,6 +9,7 @@ import scrapy
 
 class IncelswikiSpider(scrapy.Spider):
     """Spider to scrape the Incels Wiki and archive pages locally."""
+
     def __init__(self):
         super().__init__()
         # Capture the timestamp once during initialization
