@@ -1,12 +1,14 @@
-import scrapy
+"""Spider to scrape the Incels Wiki and archive pages locally."""
+
 import os
 import re
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin
 from datetime import datetime
+import scrapy
 
 
 class IncelswikiSpider(scrapy.Spider):
-
+    """Spider to scrape the Incels Wiki and archive pages locally."""
     def __init__(self):
         # Capture the timestamp once during initialization
         self.timestamp = datetime.now().strftime("%Y%m%d-%H%M")
@@ -16,11 +18,11 @@ class IncelswikiSpider(scrapy.Spider):
     start_urls = ['https://incels.wiki/w/Incel']
     custom_settings = {
         'FEEDS': {
-            f'feeds/nodes.csv': {
+            'feeds/nodes.csv': {
                 'format': 'csv',
                 'fields': ['id', 'label']
             },
-            f'feeds/edges.csv': {
+            'feeds/edges.csv': {
                 'format': 'csv',
                 'fields': ['source', 'target']
             }
@@ -32,6 +34,7 @@ class IncelswikiSpider(scrapy.Spider):
     }
 
     def parse(self, response):
+        """Parse the response from the Incels Wiki and extract nodes and edges."""
         # Save response to local archive
         self.local_archive(response)
 
@@ -91,6 +94,7 @@ class IncelswikiSpider(scrapy.Spider):
         #             outfile.write(line)
 
     def local_archive(self, response):
+        """Save the response body to a local archive."""
         # Generate a filename based on the page title
         filename = response.url.split('/')[-1]
         filename = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '_',
@@ -107,4 +111,5 @@ class IncelswikiSpider(scrapy.Spider):
                 self.logger.info(f'Saved {filename}.html to {directory}')
 
     def remote_archive(self):
+        """Placeholder for remote archiving logic."""
         pass
