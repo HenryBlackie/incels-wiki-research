@@ -14,7 +14,11 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
+    - name: Install uv
+      run: pip install uv
+    - name: Install dependencies with uv
+      run: uv pip install -r <(uv pip compile pyproject.toml)
+    - name: Install Pylint
       run: |
         python -m pip install --upgrade pip
         pip install pylint
