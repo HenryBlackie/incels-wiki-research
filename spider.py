@@ -10,6 +10,7 @@ import scrapy
 class IncelswikiSpider(scrapy.Spider):
     """Spider to scrape the Incels Wiki and archive pages locally."""
     def __init__(self):
+        super().__init__()
         # Capture the timestamp once during initialization
         self.timestamp = datetime.now().strftime("%Y%m%d-%H%M")
 
@@ -109,7 +110,3 @@ class IncelswikiSpider(scrapy.Spider):
             with open(f'{directory}/{filename}.html', 'wb+') as f:
                 f.write(response.body)
                 self.logger.info(f'Saved {filename}.html to {directory}')
-
-    def remote_archive(self):
-        """Placeholder for remote archiving logic."""
-        pass
