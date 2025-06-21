@@ -13,7 +13,8 @@ class IncelswikiSpider(scrapy.Spider):
     def __init__(self):
         super().__init__()
         # Capture the timestamp once during initialization
-        self.timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+        self.timestamp = datetime.now().strftime('%Y%m%d-%H%M')
+        self.outlink_pattern = re.compile(r'\/w\/(?!File)(?!Category)(?!Editing_rules)[^#\t\n\r]+')
 
     name = 'incelswiki'
     allowed_domains = ['incels.wiki']
@@ -30,7 +31,8 @@ class IncelswikiSpider(scrapy.Spider):
             }
         },
         'AUTOTHROTTLE_ENABLED': True,
-        'DEPTH_LIMIT': 3,
+        'DEPTH_LIMIT': 2,
+        'REDIRECT_ENABLED': True,
         'LOGSTATS_INTERVAL': 15,
         'LOG_LEVEL': 'INFO'
     }
@@ -40,31 +42,41 @@ class IncelswikiSpider(scrapy.Spider):
         # Save response to local archive
         self.local_archive(response)
 
+        # Extract the title and outlinks from the response
         title = response.css('#firstHeading>span::text').get()
-        body_links = response.css('#mw-content-text').css(
-            'a[href^="/w/"]:not(.image):not(.reference):not(.external):not(.new)'
-        ).xpath('@href').getall()
-        # body_links = [ x for x in body_links if ':' not in x ]
-        for href in body_links:
-            # Filter out links that contain a colon (e.g., namespace links)
-            if ':' in href:
-                body_links.remove(href)
-            elif '#' in href:
-                # Strip anchor tags from links
-                body_links[body_links.index(href)] = href.split('#')[0]
+        outlinks = response.css('#mw-content-text a::attr(href)').getall()
 
         # Yield the node details
         yield {'id': response.url, 'label': title if title else 'No title'}
 
-        for i, href in enumerate(body_links):
-            target_url = urljoin(response.url, href)
+        # Yield the first edge details
+        first_outlink = self.extract_first_outlink(response)
+        self.logger.info(f'{title} ---> {first_outlink}')
+        yield {
+            'source': response.url,
+            'target': urljoin(response.url, first_outlink)
+        }
 
-            # Yield the first edge details
-            if i == 0:
-                yield {'source': response.url, 'target': target_url}
+        # # body_links = [ x for x in body_links if ':' not in x ]
+        # for href in outlinks:
+        #     # Filter out links that contain a colon (e.g., namespace links)
+        #     if ':' in href:
+        #         outlinks.remove(href)
+        #     elif '#' in href:
+        #         # Strip anchor tags from links
+        #         outlinks[outlinks.index(href)] = href.split('#')[0]
+
+        for href in outlinks:
+            # target_url = urljoin(response.url, href)
+
+            # # Yield the first edge details
+            # if i == 0:
+            #     yield {'source': response.url, 'target': target_url}
 
             # Request the target URL to continue crawling
-            yield scrapy.Request(target_url, callback=self.parse)
+            if self.outlink_pattern.match(href):
+                yield scrapy.Request(urljoin(response.url, href),
+                                     callback=self.parse)
 
         # for href in body_links:
         #     target_url = urljoin(response.url, href)
@@ -110,4 +122,13 @@ class IncelswikiSpider(scrapy.Spider):
         if response.status == 200:
             with open(f'{directory}/{filename}.html', 'wb+') as f:
                 f.write(response.body)
-                self.logger.info(f'Saved {filename}.html to {directory}')
+                self.logger.debug(f'Saved {filename}.html to {directory}')
+
+    def extract_first_outlink(self, response):
+        """Extract the first outlink from the main content text."""
+        for href in response.css('#mw-content-text a::attr(href)').getall():
+            re_match = self.outlink_pattern.match(href)
+            # if self.outlink_pattern.match(href) and not href.startswith('https'):
+            if re_match:
+                # self.logger.warning(re_match)
+                return re_match.group(0)
