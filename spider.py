@@ -31,7 +31,7 @@ class IncelswikiSpider(scrapy.Spider):
             }
         },
         'AUTOTHROTTLE_ENABLED': True,
-        'DEPTH_LIMIT': 2,
+        'DEPTH_LIMIT': 3,
         'REDIRECT_ENABLED': True,
         'LOGSTATS_INTERVAL': 15,
         'LOG_LEVEL': 'INFO'
