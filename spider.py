@@ -19,7 +19,8 @@ class IncelswikiSpider(scrapy.Spider):
 
     name = 'incelswiki'
     allowed_domains = ['incels.wiki']
-    start_urls = ['https://incels.wiki/w/Incel']
+    with open('start_urls.txt', 'r') as f:
+        start_urls = [url.strip() for url in f.readlines()]
     custom_settings = {
         'FEEDS': {
             'feeds/nodes.csv': {
@@ -34,7 +35,7 @@ class IncelswikiSpider(scrapy.Spider):
         'AUTOTHROTTLE_ENABLED': True,
         'DEPTH_LIMIT': 1,
         'REDIRECT_ENABLED': True,
-        'LOGSTATS_INTERVAL': 15,
+        'LOGSTATS_INTERVAL': 300,
         'LOG_LEVEL': 'INFO'
     }
 
