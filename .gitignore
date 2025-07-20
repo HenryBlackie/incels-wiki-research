@@ -12,3 +12,6 @@ wheels/
 # Output directories
 archive/
 feeds/
+
+# Configuration files
+start_urls.txt
