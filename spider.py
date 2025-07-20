@@ -5,6 +5,7 @@ import re
 from urllib.parse import urljoin
 from datetime import datetime
 import scrapy
+import requests
 
 
 class IncelswikiSpider(scrapy.Spider):
@@ -31,7 +32,7 @@ class IncelswikiSpider(scrapy.Spider):
             }
         },
         'AUTOTHROTTLE_ENABLED': True,
-        'DEPTH_LIMIT': 3,
+        'DEPTH_LIMIT': 1,
         'REDIRECT_ENABLED': True,
         'LOGSTATS_INTERVAL': 15,
         'LOG_LEVEL': 'INFO'
@@ -39,8 +40,9 @@ class IncelswikiSpider(scrapy.Spider):
 
     def parse(self, response):
         """Parse the response from the Incels Wiki and extract nodes and edges."""
-        # Save response to local archive
-        self.local_archive(response)
+        # Update archives
+        self.save_to_local_archive(response)
+        self.save_to_wayback(response.url)
 
         # Extract the title and outlinks from the response
         title = response.css('#firstHeading>span::text').get()
@@ -107,22 +109,38 @@ class IncelswikiSpider(scrapy.Spider):
         #         if line.strip() != ',':
         #             outfile.write(line)
 
-    def local_archive(self, response):
+    def save_to_local_archive(self, response):
         """Save the response body to a local archive."""
         # Generate a filename based on the page title
         filename = response.url.split('/')[-1]
         filename = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '_',
                           filename).strip()  # Replace invalid characters
+        filename_timestamp = datetime.now().strftime('%Y%m%d-%H%M')
 
         # Create a directory for the archive if it doesn't exist
-        directory = f'archive/{self.timestamp}'
+        directory = f'archive/{filename}'
         os.makedirs(directory, exist_ok=True)
 
         # Save the response body to a file
         if response.status == 200:
-            with open(f'{directory}/{filename}.html', 'wb+') as f:
+            with open(f'{directory}/{filename_timestamp}.html', 'wb+') as f:
                 f.write(response.body)
-                self.logger.debug(f'Saved {filename}.html to {directory}')
+                self.logger.debug(f'Saved {f.name}')
+    
+    def save_to_wayback(self, url):
+        """Save the response to the Wayback Machine."""
+        # Wayback Machine API endpoint
+        wayback_api = "https://web.archive.org/save/"
+
+        # Send a request to the Wayback Machine to save the URL
+        self.logger.debug(f'Saving {url} to Wayback Machine...')
+        response = requests.get(wayback_api + url)
+
+        # Check if the request was successful
+        if response.status_code == 200:
+            self.logger.debug(f"Submitted {url} to Wayback Machine.")
+        else:
+            self.logger.error(f"Failed to submit {url} to Wayback Machine: {response.status_code} - {response.reason}")
 
     def extract_first_outlink(self, response):
         """Extract the first outlink from the main content text."""
