@@ -8,6 +8,21 @@ import scrapy
 import requests
 
 
+class NodeItem(scrapy.Item):
+    """Item to represent a node in the graph."""
+    id = scrapy.Field()
+    label = scrapy.Field()
+
+class FirstEdgeItem(scrapy.Item):
+    """Item to represent the first edge in the graph."""
+    source = scrapy.Field()
+    target = scrapy.Field()
+
+class EdgeItem(scrapy.Item):
+    """Item to represent an edge in the graph."""
+    source = scrapy.Field()
+    target = scrapy.Field()
+
 class IncelswikiSpider(scrapy.Spider):
     """Spider to scrape the Incels Wiki and archive pages locally."""
 
@@ -25,11 +40,18 @@ class IncelswikiSpider(scrapy.Spider):
         'FEEDS': {
             'feeds/nodes.csv': {
                 'format': 'csv',
-                'fields': ['id', 'label']
+                'fields': ['id', 'label'],
+                'item_classes': [NodeItem]
             },
-            'feeds/edges.csv': {
+            'feeds/first_edges.csv': {
                 'format': 'csv',
-                'fields': ['source', 'target']
+                'fields': ['source', 'target'],
+                'item_classes': [FirstEdgeItem]
+            },
+            'feeds/all_edges.csv': {
+                'format': 'csv',
+                'fields': ['source', 'target'],
+                'item_classes': [EdgeItem]
             }
         },
         'AUTOTHROTTLE_ENABLED': True,
@@ -46,19 +68,52 @@ class IncelswikiSpider(scrapy.Spider):
         self.save_to_wayback(response.url)
 
         # Extract the title and outlinks from the response
-        title = response.css('#firstHeading>span::text').get()
+        title = response.css('#firstHeading span::text').get()
         outlinks = response.css('#mw-content-text a::attr(href)').getall()
 
         # Yield the node details
-        yield {'id': response.url, 'label': title if title else 'No title'}
+        # yield {'id': response.url, 'label': title if title else 'No title'}
+        yield NodeItem(id=response.url, label=title if title else 'No title')
 
         # Yield the first edge details
-        first_outlink = self.extract_first_outlink(response)
-        self.logger.info(f'{title} ---> {first_outlink}')
-        yield {
-            'source': response.url,
-            'target': urljoin(response.url, first_outlink)
-        }
+        # first_outlink = self.extract_first_outlink(response)
+        # if not first_outlink:
+        #     self.logger.warning(f'{title} ---> {first_outlink}')
+        # else:
+        #     self.logger.info(f'{title} ---> {first_outlink}')
+        # yield {
+        #     'source': response.url,
+        #     'target': urljoin(response.url, first_outlink)
+        # }
+
+        # Crawl valid internal links in the body
+        first_outlink_yielded = False
+        for href in outlinks:
+            # Only follow internal wiki article links (not files, categories, etc.)
+            if self.outlink_pattern.match(href):
+                target_url = urljoin(response.url, href)
+
+                yield EdgeItem(source=response.url, target=target_url)
+
+                if not first_outlink_yielded:
+                    # Yield the first outlink as an edge
+                    # yield {
+                    #     'source': response.url,
+                    #     'target': target_url
+                    # }
+                    yield FirstEdgeItem(source=response.url, target=target_url)
+                    first_outlink_yielded = True
+                    
+                    # Only follow the first outlink
+                    self.logger.info(f'{title} ---> {href}')
+                    yield scrapy.Request(target_url, callback=self.parse)
+        
+        if not first_outlink_yielded:
+            self.logger.warning(f'{title} ---> None')
+            # yield {
+            #             'source': response.url,
+            #             'target': None
+            #         }
 
         # # body_links = [ x for x in body_links if ':' not in x ]
         # for href in outlinks:
@@ -69,17 +124,17 @@ class IncelswikiSpider(scrapy.Spider):
         #         # Strip anchor tags from links
         #         outlinks[outlinks.index(href)] = href.split('#')[0]
 
-        for href in outlinks:
-            # target_url = urljoin(response.url, href)
+        # for href in outlinks:
+        #     # target_url = urljoin(response.url, href)
 
-            # # Yield the first edge details
-            # if i == 0:
-            #     yield {'source': response.url, 'target': target_url}
+        #     # # Yield the first edge details
+        #     # if i == 0:
+        #     #     yield {'source': response.url, 'target': target_url}
 
-            # Request the target URL to continue crawling
-            if self.outlink_pattern.match(href):
-                yield scrapy.Request(urljoin(response.url, href),
-                                     callback=self.parse)
+        #     # Request the target URL to continue crawling
+        #     if self.outlink_pattern.match(href):
+        #         yield scrapy.Request(urljoin(response.url, href),
+        #                              callback=self.parse)
 
         # for href in body_links:
         #     target_url = urljoin(response.url, href)
@@ -135,19 +190,22 @@ class IncelswikiSpider(scrapy.Spider):
 
         # Send a request to the Wayback Machine to save the URL
         self.logger.debug(f'Saving {url} to Wayback Machine...')
-        response = requests.get(wayback_api + url)
-
-        # Check if the request was successful
-        if response.status_code == 200:
+        try:
+            response = requests.get(wayback_api + url)
+            
+            # Raise an error for bad responses
+            response.raise_for_status()  
+            
             self.logger.debug(f"Submitted {url} to Wayback Machine.")
-        else:
-            self.logger.error(f"Failed to submit {url} to Wayback Machine: {response.status_code} - {response.reason}")
+        except Exception as e:
+            self.logger.error(f"Unable to archive page to Wayback Machine.")
+            self.logger.debug(f'Exception: {e}')
 
-    def extract_first_outlink(self, response):
-        """Extract the first outlink from the main content text."""
-        for href in response.css('#mw-content-text a::attr(href)').getall():
-            re_match = self.outlink_pattern.match(href)
-            # if self.outlink_pattern.match(href) and not href.startswith('https'):
-            if re_match:
-                # self.logger.warning(re_match)
-                return re_match.group(0)
+    # def extract_first_outlink(self, response):
+    #     """Extract the first outlink from the main content text."""
+    #     for href in response.css('#mw-content-text a::attr(href)').getall():
+    #         re_match = self.outlink_pattern.match(href)
+    #         # if self.outlink_pattern.match(href) and not href.startswith('https'):
+    #         if re_match:
+    #             # self.logger.warning(re_match)
+    #             return re_match.group(0)
