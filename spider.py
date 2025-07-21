@@ -55,13 +55,14 @@ class IncelswikiSpider(scrapy.Spider):
             }
         },
         'AUTOTHROTTLE_ENABLED': True,
-        'DEPTH_LIMIT': 1,
+        'DEPTH_LIMIT': 2,
         'REDIRECT_ENABLED': True,
         'LOGSTATS_INTERVAL': 300,
         'LOG_LEVEL': 'INFO'
     }
 
     def parse(self, response):
+        self.logger.info(f'Parsing {response.url}')
         """Parse the response from the Incels Wiki and extract nodes and edges."""
         # Update archives
         self.save_to_local_archive(response)
@@ -174,13 +175,12 @@ class IncelswikiSpider(scrapy.Spider):
         filename_timestamp = datetime.now().strftime('%Y%m%d-%H%M')
 
         # Create a directory for the archive if it doesn't exist
-        directory = f'archive/{filename}'
+        directory = os.path.join('archive', filename, filename_timestamp)
         os.makedirs(directory, exist_ok=True)
 
-        
         if response.status == 200:
             # Save the response HTML
-            with open(f'{directory}/{filename_timestamp}.html', 'wb+') as f:
+            with open(f'{directory}/{filename}.html', 'wb+') as f:
                 f.write(response.body)
                 self.logger.debug(f'Saved {f.name}')
 
@@ -188,13 +188,13 @@ class IncelswikiSpider(scrapy.Spider):
             for img_url in response.css('#mw-content-text img::attr(src)').getall():
                 img_url = urljoin(response.url, img_url)
                 img_name = img_url.split('/')[-1]
-                img_path = os.path.join(directory, filename_timestamp, img_name)
+                # img_path = os.path.join(directory, filename_timestamp, img_name)
                 try:
                     img_response = requests.get(img_url, timeout=10)
                     img_response.raise_for_status()
-                    with open(img_path, 'wb') as img_file:
+                    with open(os.path.join(directory, img_name), 'wb') as img_file:
                         img_file.write(img_response.content)
-                    self.logger.debug(f'Saved image {img_path}')
+                    self.logger.debug(f'Saved {img_name}.')
                 except Exception as e:
                     self.logger.warning(f'Failed to save image {img_url}: {e}')
     
@@ -213,7 +213,7 @@ class IncelswikiSpider(scrapy.Spider):
             
             self.logger.debug(f"Submitted {url} to Wayback Machine.")
         except Exception as e:
-            self.logger.error(f"Unable to archive page to Wayback Machine.")
+            self.logger.warning(f"Unable to archive page to Wayback Machine.")
             self.logger.debug(f'Exception: {e}')
 
     # def extract_first_outlink(self, response):
