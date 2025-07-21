@@ -177,11 +177,26 @@ class IncelswikiSpider(scrapy.Spider):
         directory = f'archive/{filename}'
         os.makedirs(directory, exist_ok=True)
 
-        # Save the response body to a file
+        
         if response.status == 200:
+            # Save the response HTML
             with open(f'{directory}/{filename_timestamp}.html', 'wb+') as f:
                 f.write(response.body)
                 self.logger.debug(f'Saved {f.name}')
+
+            # Save the main body images
+            for img_url in response.css('#mw-content-text img::attr(src)').getall():
+                img_url = urljoin(response.url, img_url)
+                img_name = img_url.split('/')[-1]
+                img_path = os.path.join(directory, filename_timestamp, img_name)
+                try:
+                    img_response = requests.get(img_url, timeout=10)
+                    img_response.raise_for_status()
+                    with open(img_path, 'wb') as img_file:
+                        img_file.write(img_response.content)
+                    self.logger.debug(f'Saved image {img_path}')
+                except Exception as e:
+                    self.logger.warning(f'Failed to save image {img_url}: {e}')
     
     def save_to_wayback(self, url):
         """Save the response to the Wayback Machine."""
