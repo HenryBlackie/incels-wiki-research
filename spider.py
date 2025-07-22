@@ -271,7 +271,7 @@ class IncelswikiSpider(scrapy.Spider):
         self.logger.debug(f'Saving {url} to Wayback Machine...')
         try:
             response = requests.get(wayback_api + url,
-                                    timeout=15,
+                                    timeout=30,
                                     headers={'User-Agent': 'Mozilla/5.0'})
 
             # Raise an error for bad responses
