@@ -75,12 +75,15 @@ class IncelswikiSpider(scrapy.Spider):
         # Extract the title and outlinks from the response
         title = response.css('#firstHeading span::text').get()
         # outlinks = response.css('#mw-content-text a::attr(href)').getall()
-        outlinks = response.css(
-                '#mw-content-text p a::attr(href), '
-                '#mw-content-text ul a::attr(href), '
-                '#mw-content-text ol a::attr(href), '
-                '.redirectText a::attr(href)'
-            ).getall()
+        outlinks = response.css('#mw-content-text p a::attr(href), '
+                                '#mw-content-text ul a::attr(href), '
+                                '#mw-content-text ol a::attr(href), '
+                                '.redirectText a::attr(href)').getall()
+        other_outlinks = [
+            href for href in response.css(
+                '#mw-content-text a::attr(href)').getall()
+            if href not in outlinks
+        ]
 
         # Yield the node details
         # yield {'id': response.url, 'label': title if title else 'No title'}
@@ -132,13 +135,31 @@ class IncelswikiSpider(scrapy.Spider):
 
                 # yield scrapy.Request(target_url, callback=self.parse)
 
+        # # If no valid outlinks were found, log a warning
+        # if first_outlink:
+        #     self.logger.warning(f'{response.url} ---> None')
+        # yield {
+        #             'source': response.url,
+        #             'target': None
+        #         }
+
+        # Crawl other outlinks that are not in the main content body
+        for href in other_outlinks:
+            # Only follow internal wiki article links (not files, categories, etc.)
+            if self.outlink_pattern.match(href):
+                target_url = urljoin(response.url, href)
+
+                yield scrapy.Request(target_url,
+                                     callback=self.edge_callback,
+                                     meta={
+                                         'source': response.url,
+                                         'first': first_outlink
+                                     })
+                first_outlink = False
+
         # If no valid outlinks were found, log a warning
         if first_outlink:
             self.logger.warning(f'{response.url} ---> None')
-            # yield {
-            #             'source': response.url,
-            #             'target': None
-            #         }
 
         # # body_links = [ x for x in body_links if ':' not in x ]
         # for href in outlinks:
