@@ -7,6 +7,7 @@ from datetime import datetime
 import scrapy
 import requests
 import random
+import configparser
 
 
 class NodeItem(scrapy.Item):
@@ -29,13 +30,18 @@ class EdgeItem(scrapy.Item):
 
 class IncelswikiSpider(scrapy.Spider):
     """Spider to scrape the Incels Wiki and archive pages locally."""
-
     def __init__(self):
         super().__init__()
         # Capture the timestamp once during initialization
         self.timestamp = datetime.now().strftime('%Y%m%d-%H%M')
         self.outlink_pattern = re.compile(
             r'\/w\/(?!File:)(?!Category:)(?!Editing_rules)(?!User:)(?!User_talk:)(?!Special:)(?!IncelWiki:)[^#\t\n\r]+')
+
+    # Load configuration
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+    local_archiving = config.getboolean('General', 'LocalArchiving', fallback=True)
+    wayback_machine = config.getboolean('General', 'WaybackMachine', fallback=False)
 
     name = 'incelswiki'
     allowed_domains = ['incels.wiki']
@@ -61,18 +67,20 @@ class IncelswikiSpider(scrapy.Spider):
             }
         },
         'AUTOTHROTTLE_ENABLED': True,
-        'DEPTH_LIMIT': 10,
+        'DEPTH_LIMIT': config.getint('Scrapy', 'DepthLimit', fallback=2),
         'REDIRECT_ENABLED': True,
-        'LOGSTATS_INTERVAL': 300,
-        'LOG_LEVEL': 'INFO'
+        'LOGSTATS_INTERVAL': config.getint('Scrapy', 'LogStatsInterval', fallback=60),
+        'LOG_LEVEL': config.get('Scrapy', 'LogLevel', fallback='INFO'),
     }
 
     def parse(self, response):
         self.logger.debug(f'Parsing {response.url}')
         """Parse the response from the Incels Wiki and extract nodes and edges."""
         # Update archives
-        self.save_to_local_archive(response)
-        # self.save_to_wayback(response.url)
+        if self.local_archiving:
+            self.save_to_local_archive(response)
+        if self.wayback_machine:
+            self.save_to_wayback(response.url)
 
         # Extract the title and outlinks from the response
         title = response.css('#firstHeading span::text').get()
