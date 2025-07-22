@@ -35,7 +35,7 @@ class IncelswikiSpider(scrapy.Spider):
         # Capture the timestamp once during initialization
         self.timestamp = datetime.now().strftime('%Y%m%d-%H%M')
         self.outlink_pattern = re.compile(
-            r'\/w\/(?!File)(?!Category)(?!Editing_rules)(?!User:)(?!User_talk:)(?!Special:)[^#\t\n\r]+')
+            r'\/w\/(?!File)(?!Category)(?!Editing_rules)(?!User:)(?!User_talk:)(?!Special:)(?!IncelWiki:)[^#\t\n\r]+')
 
     name = 'incelswiki'
     allowed_domains = ['incels.wiki']
@@ -72,7 +72,7 @@ class IncelswikiSpider(scrapy.Spider):
         """Parse the response from the Incels Wiki and extract nodes and edges."""
         # Update archives
         self.save_to_local_archive(response)
-        self.save_to_wayback(response.url)
+        # self.save_to_wayback(response.url)
 
         # Extract the title and outlinks from the response
         title = response.css('#firstHeading span::text').get()
