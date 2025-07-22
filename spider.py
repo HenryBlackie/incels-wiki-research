@@ -247,7 +247,6 @@ class IncelswikiSpider(scrapy.Spider):
                     '#mw-content-text img::attr(src)').getall():
                 img_url = urljoin(response.url, img_url)
                 img_name = img_url.split('/')[-1]
-                # img_path = os.path.join(directory, filename_timestamp, img_name)
                 try:
                     img_response = requests.get(
                         img_url,
@@ -269,7 +268,9 @@ class IncelswikiSpider(scrapy.Spider):
         # Send a request to the Wayback Machine to save the URL
         self.logger.debug(f'Saving {url} to Wayback Machine...')
         try:
-            response = requests.get(wayback_api + url)
+            response = requests.get(urljoin(wayback_api, url),
+                                    timeout=10,
+                                    headers={'User-Agent': 'Mozilla/5.0'})
 
             # Raise an error for bad responses
             response.raise_for_status()
