@@ -35,7 +35,7 @@ class IncelswikiSpider(scrapy.Spider):
         # Capture the timestamp once during initialization
         self.timestamp = datetime.now().strftime('%Y%m%d-%H%M')
         self.outlink_pattern = re.compile(
-            r'\/w\/(?!File)(?!Category)(?!Editing_rules)(?!User:)(?!User_talk:)(?!Special:)(?!IncelWiki:)[^#\t\n\r]+')
+            r'\/w\/(?!File:)(?!Category:)(?!Editing_rules)(?!User:)(?!User_talk:)(?!Special:)(?!IncelWiki:)[^#\t\n\r]+')
 
     name = 'incelswiki'
     allowed_domains = ['incels.wiki']
