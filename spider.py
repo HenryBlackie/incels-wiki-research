@@ -68,7 +68,7 @@ class IncelswikiSpider(scrapy.Spider):
     }
 
     def parse(self, response):
-        self.logger.info(f'Parsing {response.url}')
+        self.logger.debug(f'Parsing {response.url}')
         """Parse the response from the Incels Wiki and extract nodes and edges."""
         # Update archives
         self.save_to_local_archive(response)
@@ -271,7 +271,7 @@ class IncelswikiSpider(scrapy.Spider):
         self.logger.debug(f'Saving {url} to Wayback Machine...')
         try:
             response = requests.get(wayback_api + url,
-                                    timeout=10,
+                                    timeout=15,
                                     headers={'User-Agent': 'Mozilla/5.0'})
 
             # Raise an error for bad responses
