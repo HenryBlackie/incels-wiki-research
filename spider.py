@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 from datetime import datetime
 import scrapy
 import requests
+import random
 
 
 class NodeItem(scrapy.Item):
@@ -40,6 +41,7 @@ class IncelswikiSpider(scrapy.Spider):
     allowed_domains = ['incels.wiki']
     with open('start_urls.txt', 'r') as f:
         start_urls = [url.strip() for url in f.readlines()]
+        random.shuffle(start_urls)
     custom_settings = {
         'FEEDS': {
             'feeds/nodes.csv': {
@@ -66,7 +68,7 @@ class IncelswikiSpider(scrapy.Spider):
     }
 
     def parse(self, response):
-        self.logger.debug(f'Parsing {response.url}')
+        self.logger.info(f'Parsing {response.url}')
         """Parse the response from the Incels Wiki and extract nodes and edges."""
         # Update archives
         self.save_to_local_archive(response)
@@ -277,7 +279,7 @@ class IncelswikiSpider(scrapy.Spider):
 
             self.logger.debug(f"Submitted {url} to Wayback Machine.")
         except Exception as e:
-            self.logger.warning(f"Unable to archive page to Wayback Machine.")
+            self.logger.warning(f"Unable to archive {url.split('/')[-1]} to Wayback Machine.")
             self.logger.debug(f'Exception: {e}')
 
     # def extract_first_outlink(self, response):
