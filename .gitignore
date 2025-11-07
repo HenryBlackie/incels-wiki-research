@@ -10,5 +10,9 @@ wheels/
 .venv
 
 # Output directories
-archive/
+local_archive/
 feeds/
+
+# AutoArchive Files
+downloaded_files/
+secrets/antibot_user_data
