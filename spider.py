@@ -34,21 +34,25 @@ class IncelswikiSpider(scrapy.Spider):
 
     def __init__(self):
         super().__init__()
-        # Capture the timestamp once during initialization
-        self.timestamp = datetime.now().strftime('%Y%m%d-%H%M')
         self.outlink_pattern = re.compile(
             r'\/w\/(?!File:)(?!Category:)(?!Editing_rules)(?!User:)(?!User_talk:)(?!Special:)(?!IncelWiki:)[^#\t\n\r]+'
         )
 
+    # Get initial timestamp
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M')
+
     # Load configuration
     config = configparser.ConfigParser()
     config.read('config.ini')
-    local_archiving = config.getboolean('General',
-                                        'LocalArchiving',
-                                        fallback=True)
-    wayback_machine = config.getboolean('General',
-                                        'WaybackMachine',
-                                        fallback=False)
+    # local_archiving = config.getboolean('General',
+    #                                     'LocalArchiving',
+    #                                     fallback=True)
+    # wayback_machine = config.getboolean('General',
+    #                                     'WaybackMachine',
+    #                                     fallback=False)
+    # archive = config.getboolean('General',
+    #                                  'AutoArchive',
+    #                                     fallback=False)
 
     name = 'incelswiki'
     allowed_domains = ['incels.wiki']
@@ -57,17 +61,17 @@ class IncelswikiSpider(scrapy.Spider):
         random.shuffle(start_urls)
     custom_settings = {
         'FEEDS': {
-            'feeds/nodes.csv': {
+            f'feeds/{timestamp}/nodes.csv': {
                 'format': 'csv',
                 'fields': ['id', 'label'],
                 'item_classes': [NodeItem]
             },
-            'feeds/first_edges.csv': {
+            f'feeds/{timestamp}/first_edges.csv': {
                 'format': 'csv',
                 'fields': ['source', 'target'],
                 'item_classes': [FirstEdgeItem]
             },
-            'feeds/all_edges.csv': {
+            f'feeds/{timestamp}/all_edges.csv': {
                 'format': 'csv',
                 'fields': ['source', 'target'],
                 'item_classes': [EdgeItem]
@@ -86,102 +90,120 @@ class IncelswikiSpider(scrapy.Spider):
     }
 
     def parse(self, response):
-        self.logger.debug(f'Parsing {response.url}')
-        """Parse the response from the Incels Wiki and extract nodes and edges."""
-        # Update archives
-        # if self.local_archiving:
-        #     self.save_to_local_archive(response)
-        # if self.wayback_machine:
-        #     self.save_to_wayback(response.url)
-        self.auto_archive(response.url)
+        try:
+            """Parse the response from the Incels Wiki and extract nodes and edges."""
+            self.logger.debug(f'Parsing {response.url}')
+            # Update archives
+            # if self.local_archiving:
+            #     self.save_to_local_archive(response)
+            # if self.wayback_machine:
+            #     self.save_to_wayback(response.url)
+            if self.config.getboolean('General', 'AutoArchive', fallback=False):
+                self.auto_archive(response.url)
 
-        # Extract the title and outlinks from the response
-        title = response.css('#firstHeading span::text').get()
-        outlinks = response.css('#mw-content-text p a::attr(href), '
-                                '#mw-content-text ul a::attr(href), '
-                                '#mw-content-text ol a::attr(href), '
-                                '.redirectText a::attr(href)').getall()
-        other_outlinks = [
-            href for href in response.css(
-                '#mw-content-text a::attr(href)').getall()
-            if href not in outlinks
-        ]
+            # Extract the title and outlinks from the response
+            title = response.css('#firstHeading span::text').get()
+            outlinks = response.css('#mw-content-text p a::attr(href), '
+                                    '#mw-content-text ul a::attr(href), '
+                                    '#mw-content-text ol a::attr(href), '
+                                    '.redirectText a::attr(href)').getall()
+            other_outlinks = [
+                href for href in response.css(
+                    '#mw-content-text a::attr(href)').getall()
+                if href not in outlinks
+            ]
 
-        # Yield the node details
-        yield NodeItem(id=response.url, label=title if title else 'No title')
+            # Yield the node details
+            yield NodeItem(id=response.url, label=title if title else 'No title')
 
-        # Crawl valid internal links in the body
-        first_outlink = True
-        yielded_first = False
-        for href in outlinks:
-            # Only follow internal wiki article links (not files, categories, etc.)
-            if self.outlink_pattern.match(href):
-                target_url = urljoin(response.url, href)
-                target_url = requests.get(
-                    target_url, allow_redirects=True).url  # Resolve redirects
+            # Handle redirect history
+            yield from self.parse_history(response)
 
-                yield EdgeItem(source=response.url, target=target_url)
-                if not yielded_first:
-                    yield FirstEdgeItem(source=response.url, target=target_url)
-                    self.logger.info(f'{response.url} ---> {target_url}')
-                    yielded_first = True
+            # Crawl valid internal links in the body
+            first_outlink = True
+            yielded_first = False
+            for href in outlinks:
+                # Only follow internal wiki article links (not files, categories, etc.)
+                if self.outlink_pattern.match(href):
+                    target_url = urljoin(response.url, href)
+                    target_url = requests.get(
+                        target_url, allow_redirects=True).url  # Resolve redirects
 
-                yield scrapy.Request(target_url, callback=self.parse)
+                    yield EdgeItem(source=response.url, target=target_url)
+                    if not yielded_first:
+                        yield FirstEdgeItem(source=response.url, target=target_url)
+                        self.logger.info(f'{response.url} ---> {target_url}')
+                        yielded_first = True
 
-                # yield EdgeItem(source=response.url, target=target_url)
+                    yield scrapy.Request(target_url, callback=self.parse)
 
-                # is_first = not yielded_first
-                # yield scrapy.Request(target_url,
-                #                      callback=self.edge_callback,
-                #                      meta={
-                #                          'source': response.url,
-                #                          'first': is_first
-                #                      })
-                # if is_first:
-                #     yielded_first = True
+                    # yield EdgeItem(source=response.url, target=target_url)
 
-        # Crawl other outlinks that are not in the main content body
-        for href in other_outlinks:
-            # Only follow internal wiki article links (not files, categories, etc.)
-            if self.outlink_pattern.match(href):
-                # target_url = urljoin(response.url, href)
+                    # is_first = not yielded_first
+                    # yield scrapy.Request(target_url,
+                    #                      callback=self.edge_callback,
+                    #                      meta={
+                    #                          'source': response.url,
+                    #                          'first': is_first
+                    #                      })
+                    # if is_first:
+                    #     yielded_first = True
 
-                # is_first = not yielded_first
-                # yield scrapy.Request(target_url,
-                #                      callback=self.edge_callback,
-                #                      meta={
-                #                          'source': response.url,
-                #                          'first': is_first
-                #                      })
-                # if is_first:
-                #     yielded_first = True
+            # Crawl other outlinks that are not in the main content body
+            for href in other_outlinks:
+                # Only follow internal wiki article links (not files, categories, etc.)
+                if self.outlink_pattern.match(href):
+                    # target_url = urljoin(response.url, href)
 
-                target_url = urljoin(response.url, href)
-                target_url = requests.get(
-                    target_url, allow_redirects=True).url  # Resolve redirects
+                    # is_first = not yielded_first
+                    # yield scrapy.Request(target_url,
+                    #                      callback=self.edge_callback,
+                    #                      meta={
+                    #                          'source': response.url,
+                    #                          'first': is_first
+                    #                      })
+                    # if is_first:
+                    #     yielded_first = True
 
-                yield EdgeItem(source=response.url, target=target_url)
-                if not yielded_first:
-                    yield FirstEdgeItem(source=response.url, target=target_url)
-                    self.logger.info(f'{response.url} ---> {target_url}')
-                    yielded_first = True
+                    target_url = urljoin(response.url, href)
+                    target_url = requests.get(
+                        target_url, allow_redirects=True).url  # Resolve redirects
 
-                yield scrapy.Request(target_url, callback=self.parse)
+                    yield EdgeItem(source=response.url, target=target_url)
+                    if not yielded_first:
+                        yield FirstEdgeItem(source=response.url, target=target_url)
+                        self.logger.info(f'{response.url} ---> {target_url}')
+                        yielded_first = True
 
-        # If no valid outlinks were found, log a warning
-        if not yielded_first:
-            self.logger.warning(f'{response.url} ---> None')
+                    yield scrapy.Request(target_url, callback=self.parse)
 
-    # def edge_callback(self, response):
-    #     source = response.meta['source']
-    #     first = response.meta['first']
+            # If no valid outlinks were found, log a warning
+            if not yielded_first:
+                self.logger.warning(f'{response.url} ---> None')
 
-    #     # Use response.url as canonical target
-    #     yield EdgeItem(source=source, target=response.url)
-    #     if first:
-    #         yield FirstEdgeItem(source=source, target=response.url)
-    #         self.logger.info(f'{source} ---> {response.url}')
+        # def edge_callback(self, response):
+        #     source = response.meta['source']
+        #     first = response.meta['first']
 
+        #     # Use response.url as canonical target
+        #     yield EdgeItem(source=source, target=response.url)
+        #     if first:
+        #         yield FirstEdgeItem(source=source, target=response.url)
+        #         self.logger.info(f'{source} ---> {response.url}')
+        except Exception as e:
+                self.logger.error(f'Error parsing {response.url}: {e}')
+    
+    def parse_history(self, response):
+        history_chain = response.request.meta.get('redirect_urls', []) if response.request else []
+        if history_chain:
+            history_chain.append(response.url)
+
+            for index, link in enumerate(history_chain):
+                if index < len(history_chain) - 1:
+                    yield FirstEdgeItem(source=link, target=history_chain[index + 1])
+                    yield EdgeItem(source=link, target=history_chain[index + 1])
+                    self.logger.info(f'{link} ---> {history_chain[index + 1]}')
+    
     def save_to_local_archive(self, response):
         """Save the response body to a local archive."""
         # Generate a filename based on the page title
@@ -240,6 +262,7 @@ class IncelswikiSpider(scrapy.Spider):
             self.logger.debug(f'Exception: {e}')
 
     def auto_archive(self, url):
+        self.logger.info(f'Saving {url} to local archive')
         subprocess.run(['uv', 'run', 'auto-archiver', url],
                        stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL)
